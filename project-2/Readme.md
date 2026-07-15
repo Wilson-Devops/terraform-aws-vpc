@@ -684,3 +684,390 @@ ip-10-0-3-226
 - Verified Security Groups
 - Verified Bastion Architecture
 - Verified Private Subnet Access
+
+# Phase 10 - Terraform Remote State (S3 + DynamoDB)
+
+## Objective
+
+Store Terraform state remotely in AWS S3 and enable state locking using DynamoDB.
+
+Benefits:
+
+- Team collaboration
+- State backup
+- Version control
+- State locking
+- Disaster recovery
+
+---
+
+# Why Remote State?
+
+By default Terraform stores state locally:
+
+```text
+terraform.tfstate
+```
+
+Problems:
+
+- State lost if local machine fails
+- Difficult collaboration
+- No locking mechanism
+- Risk of state corruption
+
+Enterprise Architecture:
+
+```text
+Terraform
+    |
+    v
+S3 Bucket (Remote State)
+    |
+    v
+DynamoDB Table (State Locking)
+```
+
+---
+
+# Step 1 - Create Backend Infrastructure
+
+## backend.tf
+
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
+}
+
+provider "aws" {
+  region = "ap-south-1"
+}
+```
+
+---
+
+## Create S3 Bucket
+
+### s3.tf
+
+```hcl
+resource "aws_s3_bucket" "tf_state" {
+
+  bucket = "wilson-terraform-state-2026"
+
+  tags = {
+    Name = "Terraform-State"
+  }
+}
+```
+
+---
+
+## Enable Versioning
+
+```hcl
+resource "aws_s3_bucket_versioning" "versioning" {
+
+  bucket = aws_s3_bucket.tf_state.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+```
+
+---
+
+# Why Enable Versioning?
+
+Benefits:
+
+- Restore previous state versions
+- Protect against accidental deletion
+- Recover from corruption
+
+---
+
+## Create DynamoDB Table
+
+### dynamodb.tf
+
+```hcl
+resource "aws_dynamodb_table" "terraform_lock" {
+
+  name         = "terraform-locks"
+  billing_mode = "PAY_PER_REQUEST"
+
+  hash_key = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+```
+
+---
+
+# Why DynamoDB?
+
+Terraform uses DynamoDB to prevent multiple engineers from modifying infrastructure simultaneously.
+
+Example:
+
+```text
+Engineer A
+     |
+terraform apply
+     |
+State Locked
+     |
+Engineer B
+     |
+terraform apply
+     |
+Blocked
+```
+
+This prevents state corruption.
+
+---
+
+# Deploy Backend Resources
+
+```bash
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+
+Resources Created:
+
+- S3 Bucket
+- DynamoDB Table
+
+---
+
+# Verify in AWS
+
+## S3
+
+```text
+wilson-terraform-state-2026
+```
+
+Verify:
+
+- Bucket exists
+- Versioning enabled
+
+---
+
+## DynamoDB
+
+```text
+terraform-locks
+```
+
+Verify:
+
+- Table exists
+- LockID partition key created
+
+---
+
+# Step 2 - Configure Main Project Backend
+
+Return to main project directory:
+
+```bash
+cd ../terraform-vpc-project
+```
+
+Create:
+
+## backend.tf
+
+```hcl
+terraform {
+
+  backend "s3" {
+
+    bucket         = "wilson-terraform-state-2026"
+    key            = "networking-project/terraform.tfstate"
+    region         = "ap-south-1"
+
+    dynamodb_table = "terraform-locks"
+
+    encrypt = true
+  }
+}
+```
+
+---
+
+# Migrate Existing State
+
+Run:
+
+```bash
+terraform init
+```
+
+Terraform will prompt:
+
+```text
+Do you want to copy existing state to the new backend?
+```
+
+Select:
+
+```text
+yes
+```
+
+---
+
+# Verify State Migration
+
+Check S3 bucket.
+
+Expected object:
+
+```text
+networking-project/
+└── terraform.tfstate
+```
+
+---
+
+# State File Flow
+
+```text
+Terraform Apply
+       |
+       v
+Acquire Lock
+(DynamoDB)
+       |
+       v
+Read State
+(S3)
+       |
+       v
+Create/Modify Resources
+       |
+       v
+Update State
+(S3)
+       |
+       v
+Release Lock
+(DynamoDB)
+```
+
+---
+
+# Interview Questions
+
+## What is Terraform State?
+
+Terraform State is a file that stores information about infrastructure resources managed by Terraform.
+
+Example:
+
+```json
+{
+  "aws_vpc.main": {
+    "id": "vpc-123456"
+  }
+}
+```
+
+---
+
+## Why Store State Remotely?
+
+- Collaboration
+- Backup
+- Security
+- Reliability
+- State Locking
+
+---
+
+## Why Use DynamoDB with Terraform?
+
+To provide state locking and prevent concurrent modifications.
+
+---
+
+## What Happens If Two Engineers Run Terraform Apply Simultaneously?
+
+Without locking:
+
+- State corruption can occur
+
+With DynamoDB:
+
+- One engineer acquires the lock
+- Others must wait until lock is released
+
+---
+
+## How Do You Secure Terraform State?
+
+Best Practices:
+
+- Enable S3 Versioning
+- Enable Encryption
+- Restrict IAM Access
+- Use DynamoDB Locking
+- Store State Remotely
+
+---
+
+## What Happens If Terraform Apply Fails Halfway?
+
+Terraform updates state only for successfully created resources.
+
+Subsequent applies reconcile the infrastructure to the desired state.
+
+---
+
+# Resume Point
+
+Designed and implemented enterprise-grade Terraform remote state management using Amazon S3 backend with versioning and DynamoDB state locking to enable secure, collaborative Infrastructure as Code deployments.
+
+---
+
+# Current Project Status
+
+Completed:
+
+- VPC
+- Public Subnets
+- Private Subnets
+- Internet Gateway
+- NAT Gateway
+- Route Tables
+- Security Groups
+- Bastion Host
+- Private EC2
+- SSH Connectivity Validation
+- Terraform Remote State (S3 Backend)
+- DynamoDB State Locking
+
+Next Phase:
+
+- Terraform Modules
+- Reusable VPC Module
+- Reusable Security Group Module
+- Reusable EC2 Module
+- Outputs and Module Composition
+- Enterprise Terraform Project Structure
