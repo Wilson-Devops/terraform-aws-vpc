@@ -640,3 +640,47 @@ A:
 - Dynamic
 - Secure
 - Easier maintenance
+
+# Step 9 - Bastion Host and Private EC2
+
+## Bastion Host
+
+- Public Subnet
+- Public IP Enabled
+- Bastion-SG
+
+## Private Server
+
+- Private Subnet
+- No Public IP
+- Private-SG
+
+## SSH Flow
+
+Laptop
+  ↓
+Bastion Host
+  ↓
+Private Server
+
+SSH Command:
+
+```bash
+ssh -i devops-key.pem ec2-user@<bastion-public-ip>
+
+ssh -i devops-key.pem ec2-user@<private-ip>
+```
+
+## Validation
+
+Successfully connected to:
+
+```text
+ip-10-0-3-226
+```
+
+## Outcome
+
+- Verified Security Groups
+- Verified Bastion Architecture
+- Verified Private Subnet Access
